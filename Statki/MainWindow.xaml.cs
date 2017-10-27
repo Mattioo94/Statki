@@ -2,7 +2,6 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -12,46 +11,79 @@ namespace Statki
 {
     public partial class MainWindow : Window
     {
+        private TcpClient klient;
+        private TcpListener serwer;
+
+        private Socket socket;
+        private Stream stream;
+
         public MainWindow()
         {
             InitializeComponent();
-            client.Content = $"{GetLocalIPAddress()}:8001";
 
+            /* KONFIGURACJA KLIENTA */
+            klient = new TcpClient
+            {
+                ReceiveTimeout = 200,
+                SendTimeout = 200
+            };
+
+            /* KONFIGURACJA SERWERA */
+            IPAddress ipAd = IPAddress.Parse(GetLocalIPAddress());
+            serwer = new TcpListener(ipAd, 8001);
+
+            info.Content = serwer.LocalEndpoint;
+
+            /* START W TLE SEWERA */
             var s = new Thread(Sluchaj)
             {
                 IsBackground = true
             };
             s.Start();
+
+            /* DZIAŁANIA PRZED ZAMKNIĘCIEM APLIKACJI */
+            Closing += OnClosing;
+        }
+
+        public void OnClosing(object o, EventArgs e)
+        {
+            if(socket?.Connected ?? false)
+            {
+                socket.Close();
+            }
+
+            serwer?.Stop();
+
+            if(klient?.Connected ?? false)
+            {
+                klient.Close();
+            }
         }
 
         public void Sluchaj()
         {
             try
             {
-                IPAddress ipAd = IPAddress.Parse(GetLocalIPAddress());
-                TcpListener myList = new TcpListener(ipAd, 8001);
-               
-                myList.Start();
+                serwer.Start();
+                socket = serwer.AcceptSocket();
+                MessageBox.Show($"Connection accepted from {socket.RemoteEndPoint}");
 
-                MessageBox.Show($"The local End point is  : {myList.LocalEndpoint}{Environment.NewLine}Oczekiwanie na polaczenie..");
+                Polaczenie.Dispatcher.Invoke(() =>
+                {
+                    Polaczenie.Visibility = Visibility.Hidden;
+                });
 
-                Socket s = myList.AcceptSocket();
-                MessageBox.Show($"Connection accepted from {s.RemoteEndPoint}");
+                //byte[] b = new byte[100];
+                //int k = s.Receive(b);
 
-                byte[] b = new byte[100];
-                int k = s.Receive(b);
+                //StringBuilder str = new StringBuilder();
+                //for (int i = 0; i < k; i++)
+                //    str.Append(Convert.ToChar(b[i]));
 
-                StringBuilder str = new StringBuilder();
-                for (int i = 0; i < k; i++)
-                    str.Append(Convert.ToChar(b[i]));
+                //MessageBox.Show($"[K] Odebrano '{str.ToString()}'");
 
-                MessageBox.Show($"[K] Odebrano '{str.ToString()}'");
-
-                ASCIIEncoding asen = new ASCIIEncoding();
-                s.Send(asen.GetBytes("Odpowiedz"));
-
-                s.Close();
-                myList.Stop();
+                //ASCIIEncoding asen = new ASCIIEncoding();
+                //s.Send(asen.GetBytes("Odpowiedz"));
             }
             catch (Exception e)
             {
@@ -59,34 +91,34 @@ namespace Statki
             }
         }
 
-        public void Polacz(string serwer)
+        public void Polacz(string ip, out bool connected)
         {
             try
             {
-                TcpClient tcpclnt = new TcpClient();
-                tcpclnt.Connect(serwer, 8001);
+                klient.Connect(ip, 8001);
+                stream = klient.GetStream();
 
-                Stream stm = tcpclnt.GetStream();
+                serwer?.Stop();
 
-                ASCIIEncoding asen = new ASCIIEncoding();
-                byte[] ba = asen.GetBytes("Komunikat");
+                //ASCIIEncoding asen = new ASCIIEncoding();
+                //byte[] ba = asen.GetBytes("Komunikat");
 
-                stm.Write(ba, 0, ba.Length);
+                //stm.Write(ba, 0, ba.Length);
 
-                byte[] bb = new byte[100];
-                int k = stm.Read(bb, 0, 100);
+                //byte[] bb = new byte[100];
+                //int k = stm.Read(bb, 0, 100);
 
-                StringBuilder str = new StringBuilder();
-                for (int i = 0; i < k; i++)
-                    str.Append(Convert.ToChar(bb[i]));
+                //StringBuilder str = new StringBuilder();
+                //for (int i = 0; i < k; i++)
+                //    str.Append(Convert.ToChar(bb[i]));
 
-                MessageBox.Show($"[S] Odebrano '{str.ToString()}'");
-
-                tcpclnt.Close();
+                //MessageBox.Show($"[S] Odebrano '{str.ToString()}'");
+                connected = true;
             }
 
             catch (Exception e)
             {
+                connected = false;
                 Console.WriteLine("Error..... " + e.StackTrace);
             }
         }
@@ -106,19 +138,28 @@ namespace Statki
 
         private void server_KeyDown(object sender, KeyEventArgs e)
         {
-            TextBox t = sender as TextBox;
-
             if (e.Key == Key.Enter)
             {
+                TextBox t = sender as TextBox;
+
                 string serwer = string.Empty;
                 t.Dispatcher.Invoke(() =>
                 {
                     serwer = t.Text;
                 });
 
-                Thread k = new Thread(() => Polacz(serwer));
+                bool connected = false;
+                Thread k = new Thread(() => Polacz(serwer, out connected));
                 k.Start();
                 k.Join();
+
+                if(connected)
+                {
+                    Polaczenie.Dispatcher.Invoke(() =>
+                    {
+                        Polaczenie.Visibility = Visibility.Hidden;
+                    });
+                }
             }
         }
     }
