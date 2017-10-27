@@ -5,6 +5,8 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace Statki
 {
@@ -13,40 +15,13 @@ namespace Statki
         public MainWindow()
         {
             InitializeComponent();
-            Thread s = new Thread(Sluchaj);
+            client.Content = $"{GetLocalIPAddress()}:8001";
 
+            var s = new Thread(Sluchaj)
+            {
+                IsBackground = true
+            };
             s.Start();
-
-            try
-            {
-                TcpClient tcpclnt = new TcpClient();
-                tcpclnt.Connect(GetLocalIPAddress(), 8001);
-
-                Stream stm = tcpclnt.GetStream();
-
-                ASCIIEncoding asen = new ASCIIEncoding();
-                byte[] ba = asen.GetBytes("Komunikat");
-
-                stm.Write(ba, 0, ba.Length);
-
-                byte[] bb = new byte[100];
-                int k = stm.Read(bb, 0, 100);
-
-                StringBuilder str = new StringBuilder();
-                for (int i = 0; i < k; i++)
-                    str.Append(Convert.ToChar(bb[i]));
-
-                MessageBox.Show($"[S] Odebrano '{str.ToString()}'");
-
-                tcpclnt.Close();
-            }
-
-            catch (Exception e)
-            {
-                Console.WriteLine("Error..... " + e.StackTrace);
-            }
-
-            s.Join();
         }
 
         public void Sluchaj()
@@ -75,10 +50,41 @@ namespace Statki
                 ASCIIEncoding asen = new ASCIIEncoding();
                 s.Send(asen.GetBytes("Odpowiedz"));
 
-                /* clean up */
                 s.Close();
                 myList.Stop();
             }
+            catch (Exception e)
+            {
+                Console.WriteLine("Error..... " + e.StackTrace);
+            }
+        }
+
+        public void Polacz(string serwer)
+        {
+            try
+            {
+                TcpClient tcpclnt = new TcpClient();
+                tcpclnt.Connect(serwer, 8001);
+
+                Stream stm = tcpclnt.GetStream();
+
+                ASCIIEncoding asen = new ASCIIEncoding();
+                byte[] ba = asen.GetBytes("Komunikat");
+
+                stm.Write(ba, 0, ba.Length);
+
+                byte[] bb = new byte[100];
+                int k = stm.Read(bb, 0, 100);
+
+                StringBuilder str = new StringBuilder();
+                for (int i = 0; i < k; i++)
+                    str.Append(Convert.ToChar(bb[i]));
+
+                MessageBox.Show($"[S] Odebrano '{str.ToString()}'");
+
+                tcpclnt.Close();
+            }
+
             catch (Exception e)
             {
                 Console.WriteLine("Error..... " + e.StackTrace);
@@ -96,6 +102,24 @@ namespace Statki
                 }
             }
             throw new Exception("No network adapters with an IPv4 address in the system!");
+        }
+
+        private void server_KeyDown(object sender, KeyEventArgs e)
+        {
+            TextBox t = sender as TextBox;
+
+            if (e.Key == Key.Enter)
+            {
+                string serwer = string.Empty;
+                t.Dispatcher.Invoke(() =>
+                {
+                    serwer = t.Text;
+                });
+
+                Thread k = new Thread(() => Polacz(serwer));
+                k.Start();
+                k.Join();
+            }
         }
     }
 }
