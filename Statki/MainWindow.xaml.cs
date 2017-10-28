@@ -113,6 +113,12 @@ namespace Statki
             client.Connect(IPAddress.Parse((string)ip), 8001);
             _streamOfClient = client.GetStream();
 
+            var clientListenThread = new Thread(new ThreadStart(ClientReceive))
+            {
+                IsBackground = true
+            };
+            clientListenThread.Start();
+
             Polaczenie.Dispatcher.Invoke(() =>
             {
                 Polaczenie.Visibility = Visibility.Hidden;
@@ -122,6 +128,29 @@ namespace Statki
             {
                 Menu.Visibility = Visibility.Visible;
             });
+        }
+
+        public void ClientReceive()
+        {
+            while (true)
+            {
+                if (_streamOfClient.DataAvailable)
+                {
+                    byte[] bytes = new byte[1024];
+                    int count = _streamOfClient.Read(bytes, 0, bytes.Length);
+
+                    StringBuilder str = new StringBuilder();
+                    for (int i = 0; i < count; i++)
+                    {
+                        str.Append(Convert.ToChar(bytes[i]));
+                    }
+
+                    if (!string.IsNullOrEmpty(str.ToString()))
+                    {
+                        MessageBox.Show(str.ToString());
+                    }
+                }
+            }
         }
 
         private void Adres_KeyDown(object sender, KeyEventArgs e)
