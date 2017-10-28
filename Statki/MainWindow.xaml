@@ -8,8 +8,12 @@
         Title="MainWindow" Height="350" Width="525">
     <Grid>
         <Grid x:Name="Polaczenie" Visibility="Visible">
-            <TextBox Name="adres" HorizontalAlignment="Left" Height="23" Margin="204,118,0,0" TextWrapping="Wrap" Text="Zdalny adres IP" VerticalAlignment="Top" Width="120" KeyDown="server_KeyDown"/>
+            <TextBox Name="adres" HorizontalAlignment="Left" Height="23" Margin="204,118,0,0" TextWrapping="Wrap" Text="Zdalny adres IP" VerticalAlignment="Top" Width="120" KeyDown="Adres_KeyDown"/>
             <Label Name="info" Content="Lokalny adres IP" HorizontalAlignment="Left" Margin="382,10,0,0" VerticalAlignment="Top"/>
+        </Grid>
+        <Grid x:Name="Menu" Visibility="Hidden">
+            <TextBox Name="komunikat" HorizontalAlignment="Left" Height="23" Margin="204,118,0,0" TextWrapping="Wrap" Text="Komunikat" VerticalAlignment="Top" Width="120" KeyDown="komunikat_KeyDown"/>
+
         </Grid>
         <Grid x:Name="Plansza" Visibility="Hidden">
 

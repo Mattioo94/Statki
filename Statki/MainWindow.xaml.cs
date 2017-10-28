@@ -1,7 +1,7 @@
 ﻿using System;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,117 +11,81 @@ namespace Statki
 {
     public partial class MainWindow : Window
     {
-        private TcpClient klient;
-        private TcpListener serwer;
+        private NetworkStream _streamOfClient;
+        private NetworkStream _streamOfServer;
 
-        private Socket socket;
-        private Stream stream;
+        private TcpClient client;
 
         public MainWindow()
         {
             InitializeComponent();
+            client = new TcpClient();
 
-            /* KONFIGURACJA KLIENTA */
-            klient = new TcpClient
-            {
-                ReceiveTimeout = 200,
-                SendTimeout = 200
-            };
-
-            /* KONFIGURACJA SERWERA */
-            IPAddress ipAd = IPAddress.Parse(GetLocalIPAddress());
-            serwer = new TcpListener(ipAd, 8001);
-
-            info.Content = serwer.LocalEndpoint;
-
-            /* START W TLE SEWERA */
-            var s = new Thread(Sluchaj)
+            var tcpServerRunThread = new Thread(new ThreadStart(ServerRun))
             {
                 IsBackground = true
             };
-            s.Start();
-
-            /* DZIAŁANIA PRZED ZAMKNIĘCIEM APLIKACJI */
-            Closing += OnClosing;
+            tcpServerRunThread.Start();
         }
 
-        public void OnClosing(object o, EventArgs e)
+        #region Server
+        public void ServerRun()
         {
-            if(socket?.Connected ?? false)
+            TcpListener tcpListener = new TcpListener(IPAddress.Any, 8001);
+            tcpListener.Start();
+
+            info.Dispatcher.Invoke(() =>
             {
-                socket.Close();
-            }
+                info.Content = $"{GetLocalIPAddress()}";
+            });
 
-            serwer?.Stop();
-
-            if(klient?.Connected ?? false)
+            while (true)
             {
-                klient.Close();
-            }
-        }
-
-        public void Sluchaj()
-        {
-            try
-            {
-                serwer.Start();
-                socket = serwer.AcceptSocket();
-                MessageBox.Show($"Connection accepted from {socket.RemoteEndPoint}");
-
-                Polaczenie.Dispatcher.Invoke(() =>
+                TcpClient client = tcpListener.AcceptTcpClient();
+                var tcpHandlerThread = new Thread(new ParameterizedThreadStart(TcpHandler))
                 {
-                    Polaczenie.Visibility = Visibility.Hidden;
-                });
-
-                //byte[] b = new byte[100];
-                //int k = s.Receive(b);
-
-                //StringBuilder str = new StringBuilder();
-                //for (int i = 0; i < k; i++)
-                //    str.Append(Convert.ToChar(b[i]));
-
-                //MessageBox.Show($"[K] Odebrano '{str.ToString()}'");
-
-                //ASCIIEncoding asen = new ASCIIEncoding();
-                //s.Send(asen.GetBytes("Odpowiedz"));
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error..... " + e.StackTrace);
+                    IsBackground = true
+                };
+                tcpHandlerThread.Start(client);
             }
         }
 
-        public void Polacz(string ip, out bool connected)
+        public void TcpHandler(object client)
         {
-            try
+            TcpClient mClient = (TcpClient)client;
+            _streamOfServer = mClient.GetStream();
+
+            Polaczenie.Dispatcher.Invoke(() =>
             {
-                klient.Connect(ip, 8001);
-                stream = klient.GetStream();
+                Polaczenie.Visibility = Visibility.Hidden;
+            });
 
-                serwer?.Stop();
-
-                //ASCIIEncoding asen = new ASCIIEncoding();
-                //byte[] ba = asen.GetBytes("Komunikat");
-
-                //stm.Write(ba, 0, ba.Length);
-
-                //byte[] bb = new byte[100];
-                //int k = stm.Read(bb, 0, 100);
-
-                //StringBuilder str = new StringBuilder();
-                //for (int i = 0; i < k; i++)
-                //    str.Append(Convert.ToChar(bb[i]));
-
-                //MessageBox.Show($"[S] Odebrano '{str.ToString()}'");
-                connected = true;
-            }
-
-            catch (Exception e)
+            Menu.Dispatcher.Invoke(() =>
             {
-                connected = false;
-                Console.WriteLine("Error..... " + e.StackTrace);
+                Menu.Visibility = Visibility.Visible;
+            });
+
+            while (true)
+            {
+                if (_streamOfServer.DataAvailable)
+                {
+                    byte[] bytes = new byte[1024];
+                    int count = _streamOfServer.Read(bytes, 0, bytes.Length);
+
+                    StringBuilder str = new StringBuilder();
+                    for (int i = 0; i < count; i++)
+                    {
+                        str.Append(Convert.ToChar(bytes[i]));
+                    }
+
+                    if(!string.IsNullOrEmpty(str.ToString()))
+                    {
+                        MessageBox.Show(str.ToString());
+                    }
+                }
             }
         }
+        #endregion
 
         public static string GetLocalIPAddress()
         {
@@ -136,7 +100,31 @@ namespace Statki
             throw new Exception("No network adapters with an IPv4 address in the system!");
         }
 
-        private void server_KeyDown(object sender, KeyEventArgs e)
+        public void ClientRun(object ip)
+        {
+            if(client.Connected)
+            {
+                _streamOfClient.Close();
+                client.Close();
+
+                client = new TcpClient();
+            }
+
+            client.Connect(IPAddress.Parse((string)ip), 8001);
+            _streamOfClient = client.GetStream();
+
+            Polaczenie.Dispatcher.Invoke(() =>
+            {
+                Polaczenie.Visibility = Visibility.Hidden;
+            });
+
+            Menu.Dispatcher.Invoke(() =>
+            {
+                Menu.Visibility = Visibility.Visible;
+            });
+        }
+
+        private void Adres_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
@@ -148,17 +136,35 @@ namespace Statki
                     serwer = t.Text;
                 });
 
-                bool connected = false;
-                Thread k = new Thread(() => Polacz(serwer, out connected));
-                k.Start();
-                k.Join();
-
-                if(connected)
+                var tcpClientRunThread = new Thread(new ParameterizedThreadStart(ClientRun))
                 {
-                    Polaczenie.Dispatcher.Invoke(() =>
-                    {
-                        Polaczenie.Visibility = Visibility.Hidden;
-                    });
+                    IsBackground = true
+                };
+                tcpClientRunThread.Start(serwer);
+            }
+        }
+
+        private void komunikat_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                TextBox t = sender as TextBox;
+
+                string tekst = string.Empty;
+                t.Dispatcher.Invoke(() =>
+                {
+                    tekst = t.Text;
+                });
+
+                byte[] bytes = Encoding.ASCII.GetBytes(tekst);
+
+                if (client.Connected)
+                {                 
+                    _streamOfClient.Write(bytes, 0, bytes.Length);
+                }
+                else
+                {
+                    _streamOfServer.Write(bytes, 0, bytes.Length);
                 }
             }
         }
